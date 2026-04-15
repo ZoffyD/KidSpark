@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "864800184550",
+    "project_id": "kidspark-47928",
+    "storage_bucket": "kidspark-47928.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:864800184550:android:3215a8e8b613054df28327",
+        "android_client_info": {
+          "package_name": "com.example.kidspark"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXzOsQqppTfekR2IiSLQSCHZraQKjLl4g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
