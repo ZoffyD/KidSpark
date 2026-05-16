@@ -1,7 +1,13 @@
+/// Settings panel reachable from the dashboard sidebar. Toggles background
+/// music + SFX (persisted via `AudioManager`/`SharedPreferences`) and shows
+/// music + image credits.
+library;
+
 import 'package:flutter/material.dart';
-import '../game_services.dart';
-import '../utils/responsive.dart';
+import '../core/app_constants.dart';
+import '../core/app_utils.dart';
 import '../main.dart';
+import '../services/game_services.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -11,12 +17,6 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final AudioManager audio = AudioManager();
-
-  String _label(String lang, String en, String ms, String zh) {
-    if (lang == 'zh') return zh;
-    if (lang == 'ms') return ms;
-    return en;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,20 +32,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [themeColor.withOpacity(0.2), Colors.white],
+              colors: [themeColor.withValues(alpha: 0.2), Colors.white],
             ),
           ),
           child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(horizontal: r.dp(24), vertical: r.dp(20)),
+            padding: EdgeInsets.symmetric(
+              horizontal: r.dp(24),
+              vertical: r.dp(20),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _label(lang, "Settings", "Tetapan", "设置"),
+                  tr(lang, "Settings", "Tetapan", "设置"),
                   style: TextStyle(
                     fontSize: r.sp(24),
                     fontWeight: FontWeight.w900,
-                    color: const Color(0xFF2D3142),
+                    color: AppColors.heading,
                   ),
                 ),
                 SizedBox(height: r.dp(16)),
@@ -55,7 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     Expanded(
                       child: _buildCompactCard(
-                        _label(lang, "Background Music", "Muzik Latar", "背景音乐"),
+                        tr(lang, "Background Music", "Muzik Latar", "背景音乐"),
                         Icons.music_note_rounded,
                         audio.isMusicOn,
                         Colors.purpleAccent,
@@ -69,12 +72,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SizedBox(width: r.dp(12)),
                     Expanded(
                       child: _buildCompactCard(
-                        _label(lang, "Sound Effects", "Efek Bunyi", "音效"),
+                        tr(lang, "Sound Effects", "Efek Bunyi", "音效"),
                         Icons.volume_up_rounded,
                         audio.isSfxOn,
                         Colors.blueAccent,
-                        (v) {
-                          audio.isSfxOn = v;
+                        (v) async {
+                          await audio.toggleSfx(v);
                           setState(() {});
                         },
                         r,
@@ -87,8 +90,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 SizedBox(height: r.dp(8)),
 
                 Text(
-                  _label(lang, "Credits", "Kredit", "版权信息"),
-                  style: TextStyle(fontSize: r.sp(14), fontWeight: FontWeight.bold),
+                  tr(lang, "Credits", "Kredit", "版权信息"),
+                  style: TextStyle(
+                    fontSize: r.sp(14),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 SizedBox(height: r.dp(8)),
                 Container(
@@ -102,54 +108,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Music credit row
-                      Row(children: [
-                        Icon(Icons.music_note_rounded, size: r.icon(14), color: Colors.purple[300]),
-                        SizedBox(width: r.dp(6)),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Momo Island by Piki  •  freetouse.com/music",
-                                style: TextStyle(fontSize: r.sp(10), fontWeight: FontWeight.bold),
-                              ),
-                              Text(
-                                _label(lang,
-                                  "Copyright Free Music",
-                                  "Muzik Bebas Hak Cipta",
-                                  "免版权音乐"),
-                                style: TextStyle(fontSize: r.sp(9), color: Colors.blueGrey),
-                              ),
-                            ],
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.music_note_rounded,
+                            size: r.icon(14),
+                            color: Colors.purple[300],
                           ),
-                        ),
-                      ]),
+                          SizedBox(width: r.dp(6)),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Momo Island by Piki  •  freetouse.com/music",
+                                  style: TextStyle(
+                                    fontSize: r.sp(10),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  tr(
+                                    lang,
+                                    "Copyright Free Music",
+                                    "Muzik Bebas Hak Cipta",
+                                    "免版权音乐",
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: r.sp(9),
+                                    color: Colors.blueGrey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                       SizedBox(height: r.dp(8)),
                       const Divider(height: 1),
                       SizedBox(height: r.dp(8)),
                       // Image credit row
-                      Row(children: [
-                        Icon(Icons.image_rounded, size: r.icon(14), color: Colors.blue[300]),
-                        SizedBox(width: r.dp(6)),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Images designed using Canva  •  canva.com",
-                                style: TextStyle(fontSize: r.sp(10), fontWeight: FontWeight.bold),
-                              ),
-                              Text(
-                                _label(lang,
-                                  "Canva Content License Agreement",
-                                  "Perjanjian Lesen Kandungan Canva",
-                                  "Canva内容许可协议"),
-                                style: TextStyle(fontSize: r.sp(9), color: Colors.blueGrey),
-                              ),
-                            ],
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.image_rounded,
+                            size: r.icon(14),
+                            color: Colors.blue[300],
                           ),
-                        ),
-                      ]),
+                          SizedBox(width: r.dp(6)),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Images designed using Canva  •  canva.com",
+                                  style: TextStyle(
+                                    fontSize: r.sp(10),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  tr(
+                                    lang,
+                                    "Canva Content License Agreement",
+                                    "Perjanjian Lesen Kandungan Canva",
+                                    "Canva内容许可协议",
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: r.sp(9),
+                                    color: Colors.blueGrey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -175,7 +209,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(r.dp(20)),
         border: Border.all(
-          color: value ? color.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+          color: value
+              ? color.withValues(alpha: 0.2)
+              : Colors.grey.withValues(alpha: 0.1),
           width: 2,
         ),
       ),
@@ -183,10 +219,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Icon(icon, color: color, size: r.icon(22)),
           SizedBox(height: r.dp(6)),
-          Text(title,
-              style: TextStyle(fontSize: r.sp(11), fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center),
-          Switch(value: value, onChanged: onChanged, activeColor: color),
+          Text(
+            title,
+            style: TextStyle(fontSize: r.sp(11), fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          Switch(value: value, onChanged: onChanged, activeThumbColor: color),
         ],
       ),
     );

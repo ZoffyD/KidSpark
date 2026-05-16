@@ -9,37 +9,31 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  #firebase
+
+  # Firebase
   firebase_core: ^4.3.0
   cloud_firestore: ^6.1.1
-  firebase_analytics: ^12.1.0
   firebase_auth: ^6.1.3
 
-  #state management
-  provider: ^6.1.5+1
+  # Persistence
   shared_preferences: ^2.1.1
 
-  #audio
-  just_audio: ^0.9.39
-  flame: ^1.34.0
-  flame_audio: ^2.11.12
+  # Audio + speech
+  audioplayers: ^6.5.1
   flutter_tts: ^4.0.2
 
-  #animations and effects
+  # Animations
   flutter_animate: ^4.5.2
-  lucide_icons: 0.257.0
-  lottie: ^3.3.2
-  confetti: ^0.8.0
-  audioplayers: ^6.5.1
-  animated_splash_screen: ^1.3.0
-  cached_network_image: ^3.4.1
 
-  #routing
-  go_router: ^17.0.1
-  #UI components
-  flutter_switch: ^0.3.2
-
+  # UI / fonts
   google_fonts: ^6.3.3
+
+  # Platform
+  android_intent_plus: ^5.3.0
+
+  # TTS cache infrastructure
+  path_provider: ^2.1.5
+  crypto: ^3.0.5
 
 
 dev_dependencies:

@@ -1,6 +1,10 @@
+/// End-of-level reward dialog. Shows a localised "well done" message, the
+/// 1–3 stars earned this run, and a Continue button. Used by all three games.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../utils/responsive.dart';
+import '../core/app_utils.dart';
 
 class RewardDialog extends StatelessWidget {
   final int starsEarned;
@@ -35,9 +39,12 @@ class RewardDialog extends StatelessWidget {
 
   String _continueLabel() {
     switch (lang) {
-      case 'ms': return "Teruskan";
-      case 'zh': return "继续";
-      default:   return "Continue";
+      case 'ms':
+        return "Teruskan";
+      case 'zh':
+        return "继续";
+      default:
+        return "Continue";
     }
   }
 
@@ -55,7 +62,7 @@ class RewardDialog extends StatelessWidget {
           borderRadius: BorderRadius.circular(r.dp(28)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.15),
+              color: Colors.black.withValues(alpha: 0.15),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -64,9 +71,11 @@ class RewardDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.celebration_rounded, size: r.icon(64), color: Colors.pinkAccent)
-                .animate(onPlay: (c) => c.repeat())
-                .shake(duration: 1.seconds),
+            Icon(
+              Icons.celebration_rounded,
+              size: r.icon(64),
+              color: Colors.pinkAccent,
+            ).animate(onPlay: (c) => c.repeat()).shake(duration: 1.seconds),
 
             SizedBox(height: r.dp(12)),
 
@@ -88,15 +97,16 @@ class RewardDialog extends StatelessWidget {
                 final bool earned = index < starsEarned;
                 return Padding(
                   padding: EdgeInsets.symmetric(horizontal: r.dp(4)),
-                  child: Icon(
-                    earned ? Icons.star_rounded : Icons.star_border_rounded,
-                    size: r.icon(48),
-                    color: earned ? Colors.orange : Colors.grey[300],
-                  ).animate().scale(
-                    delay: (index * 200).ms,
-                    duration: 400.ms,
-                    curve: Curves.elasticOut,
-                  ),
+                  child:
+                      Icon(
+                        earned ? Icons.star_rounded : Icons.star_border_rounded,
+                        size: r.icon(48),
+                        color: earned ? Colors.orange : Colors.grey[300],
+                      ).animate().scale(
+                        delay: (index * 200).ms,
+                        duration: 400.ms,
+                        curve: Curves.elasticOut,
+                      ),
                 );
               }),
             ),

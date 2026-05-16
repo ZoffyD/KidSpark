@@ -1,16 +1,22 @@
+/// Main dashboard with the left sidebar (Words / Feelings / Logic / Settings),
+/// the language toggle, and the curved level map (`ImageLevelMap`) that lets
+/// the user pick a level. Selecting a level swaps the active level into the
+/// content area; the actual gameplay lives in the per-game view files.
+library;
+
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
-import '../game_services.dart';
-import '../utils/responsive.dart';
-import 'settings_screen.dart';
+import '../core/app_constants.dart';
+import '../core/app_utils.dart';
+import '../core/game_content.dart';
+import '../main.dart';
+import '../services/game_services.dart';
 import 'word_builder_game.dart';
 import 'emotional_game.dart';
 import 'puzzle_game.dart';
-import '../data/game_content.dart';
-import '../main.dart';
 
 class MainDashboard extends StatefulWidget {
   const MainDashboard({super.key});
@@ -32,11 +38,16 @@ class _MainDashboardState extends State<MainDashboard> {
   Map<int, int> problemStars = {};
 
   static const List<String> wordImages = [
-    'assets/images/nasilemak.png',
-    'assets/images/wau.png',
-    'assets/images/kltower.png',
-    'assets/images/tiger.png',
-    'assets/images/hibiscus.png',
+    'assets/images/cat.png',
+    'assets/images/dog.png',
+    'assets/images/boy.png',
+    'assets/images/girl.png',
+    'assets/images/bird.png',
+    'assets/images/book.png',
+    'assets/images/apple.png',
+    'assets/images/happy.png',
+    'assets/images/school.png',
+    'assets/images/family.png',
   ];
   static const List<String> feelingImages = [
     'assets/images/birthday.png',
@@ -58,65 +69,102 @@ class _MainDashboardState extends State<MainDashboard> {
     super.initState();
     audioManager.playBackgroundMusic('map.mp3');
     _loadProgress();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final lang = KidSparkApp.languageNotifier.value;
+      audioManager.ensureLanguageOrPrompt(context, lang);
+    });
   }
 
   Future<void> _loadProgress() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
-        wordUnlocked = prefs.getInt('kidspark_word_unlocked') ?? 1;
-        emotionUnlocked = prefs.getInt('kidspark_emotional_unlocked') ?? 1;
-        problemUnlocked = prefs.getInt('kidspark_problem_unlocked') ?? 1;
+        wordUnlocked = prefs.getInt(PrefsKeys.wordUnlocked) ?? 1;
+        emotionUnlocked = prefs.getInt(PrefsKeys.emotionalUnlocked) ?? 1;
+        problemUnlocked = prefs.getInt(PrefsKeys.problemUnlocked) ?? 1;
 
+        for (int i = 1; i <= 10; i++) {
+          wordStars[i] = prefs.getInt(PrefsKeys.starsFor('word', i)) ?? 0;
+        }
         for (int i = 1; i <= 5; i++) {
-          wordStars[i] = prefs.getInt('kidspark_word_stars_$i') ?? 0;
-          emotionStars[i] = prefs.getInt('kidspark_emotional_stars_$i') ?? 0;
-          problemStars[i] = prefs.getInt('kidspark_problem_stars_$i') ?? 0;
+          emotionStars[i] =
+              prefs.getInt(PrefsKeys.starsFor('emotional', i)) ?? 0;
+          problemStars[i] = prefs.getInt(PrefsKeys.starsFor('problem', i)) ?? 0;
         }
       });
     }
   }
 
-  void _exitToMap() {
-    setState(() => _activeLevel = null);
-    _loadProgress();
+  /// Returns from a finished/abandoned level back to the level map. Reads
+  /// prefs and clears `_activeLevel` in a single `setState` so the map only
+  /// ever paints with the freshest star counts.
+  Future<void> _exitToMap() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _activeLevel = null;
+      wordUnlocked = prefs.getInt(PrefsKeys.wordUnlocked) ?? 1;
+      emotionUnlocked = prefs.getInt(PrefsKeys.emotionalUnlocked) ?? 1;
+      problemUnlocked = prefs.getInt(PrefsKeys.problemUnlocked) ?? 1;
+      for (int i = 1; i <= 10; i++) {
+        wordStars[i] = prefs.getInt(PrefsKeys.starsFor('word', i)) ?? 0;
+      }
+      for (int i = 1; i <= 5; i++) {
+        emotionStars[i] =
+            prefs.getInt(PrefsKeys.starsFor('emotional', i)) ?? 0;
+        problemStars[i] =
+            prefs.getInt(PrefsKeys.starsFor('problem', i)) ?? 0;
+      }
+    });
   }
 
   void _showInstructionDialog(
-      BuildContext context, String lang, String gameType) {
+    BuildContext context,
+    String lang,
+    String gameType,
+  ) {
     final r = Responsive(context);
 
     final instructions = {
       'en': {
-        'word':      "Tap the words to spell the name!",
-        'emotional': "Look at the picture.\nHow does this person feel?",
-        'problem':   "Drag the correct answer\ninto the box!",
+        'word': "Tap to spell.",
+        'emotional': "How do they feel?",
+        'problem': "Drag the answer.",
       },
       'ms': {
-        'word':      "Tekan perkataan untuk eja nama!",
-        'emotional': "Lihat gambar.\nApa perasaan orang ini?",
-        'problem':   "Seret jawapan yang betul\nke dalam kotak!",
+        'word': "Tekan untuk eja.",
+        'emotional': "Apa perasaan dia?",
+        'problem': "Seret jawapan.",
       },
-      'zh': {
-        'word':      "点击词语来拼写名字！",
-        'emotional': "看看图片。\n这个人感觉怎样？",
-        'problem':   "把正确的答案\n拖进方框里！",
-      },
+      'zh': {'word': "点击拼写。", 'emotional': "他感觉怎样？", 'problem': "拖动答案。"},
     };
 
     final titles = {
-      'en': {'word': "Word Game", 'emotional': "Feelings Game", 'problem': "Logic Game"},
-      'ms': {'word': "Permainan Kata", 'emotional': "Permainan Perasaan", 'problem': "Permainan Logik"},
+      'en': {
+        'word': "Word Game",
+        'emotional': "Feelings Game",
+        'problem': "Logic Game",
+      },
+      'ms': {
+        'word': "Permainan Kata",
+        'emotional': "Permainan Perasaan",
+        'problem': "Permainan Logik",
+      },
       'zh': {'word': "词语游戏", 'emotional': "心情游戏", 'problem': "逻辑游戏"},
     };
 
     final emojis = {'word': "📝", 'emotional': "😊", 'problem': "🧩"};
-    final startLabel = lang == 'zh' ? "开始！" : (lang == 'ms' ? "Mula!" : "Let's Go!");
+    final startLabel = lang == 'zh'
+        ? "开始！"
+        : (lang == 'ms' ? "Mula!" : "Let's Go!");
 
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r.dp(28))),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(r.dp(28)),
+        ),
         child: SizedBox(
           width: r.dp(320),
           child: Padding(
@@ -134,15 +182,19 @@ class _MainDashboardState extends State<MainDashboard> {
                   style: TextStyle(
                     fontSize: r.sp(22),
                     fontWeight: FontWeight.w900,
-                    color: const Color(0xFF2D3142),
+                    color: AppColors.heading,
                   ),
                 ),
                 SizedBox(height: r.dp(16)),
                 Text(
-                  instructions[lang]?[gameType] ?? instructions['en']![gameType]!,
+                  instructions[lang]?[gameType] ??
+                      instructions['en']![gameType]!,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      fontSize: r.sp(17), fontWeight: FontWeight.w600, height: 1.5),
+                    fontSize: r.sp(17),
+                    fontWeight: FontWeight.w600,
+                    height: 1.5,
+                  ),
                 ),
                 SizedBox(height: r.dp(24)),
                 SizedBox(
@@ -152,14 +204,18 @@ class _MainDashboardState extends State<MainDashboard> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(r.dp(16))),
+                        borderRadius: BorderRadius.circular(r.dp(16)),
+                      ),
                     ),
                     onPressed: () => Navigator.pop(ctx),
-                    child: Text(startLabel,
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: r.sp(18),
-                            fontWeight: FontWeight.bold)),
+                    child: Text(
+                      startLabel,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: r.sp(18),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -181,33 +237,27 @@ class _MainDashboardState extends State<MainDashboard> {
 
         final List<Map<String, dynamic>> menuItems = [
           {
-            'icon':   Icons.menu_book_rounded,
-            'label':  t['wordBuilder']!,
-            'color':  const Color(0xFFFFE5F1),
+            'icon': Icons.menu_book_rounded,
+            'label': t['wordBuilder']!,
+            'color': const Color(0xFFFFE5F1),
             'accent': Colors.pinkAccent,
           },
           {
-            'icon':   Icons.favorite_border_rounded,
-            'label':  t['emotional']!,
-            'color':  const Color(0xFFE3F2FD),
+            'icon': Icons.favorite_border_rounded,
+            'label': t['emotional']!,
+            'color': const Color(0xFFE3F2FD),
             'accent': Colors.blueAccent,
           },
           {
-            'icon':   Icons.lightbulb_outline_rounded,
-            'label':  t['problemSolving']!,
-            'color':  const Color(0xFFE0F7E9),
+            'icon': Icons.lightbulb_outline_rounded,
+            'label': t['problemSolving']!,
+            'color': const Color(0xFFE0F7E9),
             'accent': Colors.greenAccent,
-          },
-          {
-            'icon':   Icons.settings_outlined,
-            'label':  t['settings'] ?? 'Settings',
-            'color':  const Color(0xFFF3E5F5),
-            'accent': Colors.purpleAccent,
           },
         ];
 
         return Scaffold(
-          backgroundColor: const Color(0xFFF8FAFC),
+          backgroundColor: AppColors.dashboardBg,
           body: Row(
             children: [
               // ── Sidebar ───────────────────────────────────────────────
@@ -218,27 +268,42 @@ class _MainDashboardState extends State<MainDashboard> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(r.dp(24)),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 10,
+                    ),
                   ],
                 ),
-                child: Column(
-                  children: [
-                    SizedBox(height: r.dp(6)),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(menuItems.length, (i) {
-                            return _buildSidebarItem(menuItems[i], _selectedIndex == i, i, r);
-                          }),
-                        ),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: r.dp(6)),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Top: three game tabs
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(menuItems.length, (i) {
+                          return _buildSidebarItem(
+                            menuItems[i],
+                            _selectedIndex == i,
+                            i,
+                            r,
+                          );
+                        }),
                       ),
-                    ),
-                    SizedBox(height: r.dp(2)),
-                    _buildLanguageToggle(lang, r),
-                    SizedBox(height: r.dp(6)),
-                  ],
+                      // Middle: music + SFX toggles
+                      _buildAudioToggles(r),
+                      // Bottom: language + credits
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildLanguageToggle(lang, r),
+                          SizedBox(height: r.dp(4)),
+                          _buildCreditsButton(lang, r),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
@@ -254,14 +319,18 @@ class _MainDashboardState extends State<MainDashboard> {
                       boxShadow: [
                         BoxShadow(
                           color: (menuItems[_selectedIndex]['accent'] as Color)
-                              .withOpacity(0.1),
+                              .withValues(alpha: 0.1),
                           blurRadius: 20,
-                        )
+                        ),
                       ],
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(r.dp(28)),
-                      child: _buildContent(lang, t, menuItems[_selectedIndex]['accent']),
+                      child: _buildContent(
+                        lang,
+                        t,
+                        menuItems[_selectedIndex]['accent'],
+                      ),
                     ),
                   ),
                 ),
@@ -278,34 +347,37 @@ class _MainDashboardState extends State<MainDashboard> {
       onTap: () {
         HapticFeedback.lightImpact();
         unawaited(audioManager.playSfx('click.mp3'));
-        setState(() { _selectedIndex = index; _activeLevel = null; });
+        setState(() {
+          _selectedIndex = index;
+          _activeLevel = null;
+        });
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         width: r.dp(80),
-        margin: EdgeInsets.symmetric(vertical: r.dp(2)),
-        padding: EdgeInsets.symmetric(vertical: r.dp(7), horizontal: r.dp(4)),
+        margin: EdgeInsets.symmetric(vertical: r.dp(1)),
+        padding: EdgeInsets.symmetric(vertical: r.dp(5), horizontal: r.dp(4)),
         decoration: BoxDecoration(
           color: isSelected ? (item['color'] as Color) : Colors.transparent,
-          borderRadius: BorderRadius.circular(r.dp(14)),
+          borderRadius: BorderRadius.circular(r.dp(12)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               item['icon'],
-              size: r.icon(26),
+              size: r.icon(22),
               color: isSelected
-                  ? (item['accent'] as Color).withOpacity(0.9)
+                  ? (item['accent'] as Color).withValues(alpha: 0.9)
                   : Colors.grey[400],
             ),
-            SizedBox(height: r.dp(3)),
+            SizedBox(height: r.dp(2)),
             Text(
               item['label'],
               textAlign: TextAlign.center,
               maxLines: 2,
               style: TextStyle(
-                fontSize: r.sp(9),
+                fontSize: r.sp(10),
                 fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500,
                 color: isSelected ? Colors.black87 : Colors.grey[400],
               ),
@@ -316,11 +388,196 @@ class _MainDashboardState extends State<MainDashboard> {
     );
   }
 
+  Widget _buildAudioToggles(Responsive r) {
+    return Column(
+      children: [
+        _buildAudioToggle(
+          isOn: audioManager.isMusicOn,
+          onIcon: Icons.music_note_rounded,
+          offIcon: Icons.music_off_rounded,
+          color: Colors.purpleAccent,
+          r: r,
+          onTap: () async {
+            HapticFeedback.lightImpact();
+            unawaited(audioManager.playSfx('click.mp3'));
+            await audioManager.toggleMusic(!audioManager.isMusicOn);
+            if (mounted) setState(() {});
+          },
+        ),
+        SizedBox(height: r.dp(6)),
+        _buildAudioToggle(
+          isOn: audioManager.isSfxOn,
+          onIcon: Icons.volume_up_rounded,
+          offIcon: Icons.volume_off_rounded,
+          color: Colors.blueAccent,
+          r: r,
+          onTap: () async {
+            HapticFeedback.lightImpact();
+            await audioManager.toggleSfx(!audioManager.isSfxOn);
+            if (mounted) setState(() {});
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAudioToggle({
+    required bool isOn,
+    required IconData onIcon,
+    required IconData offIcon,
+    required Color color,
+    required Responsive r,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: r.dp(42),
+        height: r.dp(42),
+        decoration: BoxDecoration(
+          color: isOn ? color.withValues(alpha: 0.15) : Colors.grey[100],
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isOn ? color : Colors.grey[300]!,
+            width: 2,
+          ),
+        ),
+        child: Icon(
+          isOn ? onIcon : offIcon,
+          color: isOn ? color : Colors.grey[400],
+          size: r.icon(22),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreditsButton(String lang, Responsive r) {
+    return GestureDetector(
+      onTap: () => _showCreditsDialog(lang, r),
+      child: Container(
+        width: r.dp(28),
+        height: r.dp(28),
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.info_outline_rounded,
+          size: r.icon(18),
+          color: Colors.grey[400],
+        ),
+      ),
+    );
+  }
+
+  void _showCreditsDialog(String lang, Responsive r) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(r.dp(20)),
+        ),
+        title: Text(
+          tr(lang, "Credits", "Kredit", "版权信息"),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppColors.heading,
+          ),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.music_note_rounded,
+                    size: r.icon(18),
+                    color: Colors.purple[300],
+                  ),
+                  SizedBox(width: r.dp(8)),
+                  const Expanded(
+                    child: Text(
+                      "Momo Island by Piki",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: EdgeInsets.only(
+                  left: r.dp(26),
+                  top: r.dp(2),
+                  bottom: r.dp(8),
+                ),
+                child: Text(
+                  tr(
+                    lang,
+                    "freetouse.com/music — Copyright Free Music",
+                    "freetouse.com/music — Muzik Bebas Hak Cipta",
+                    "freetouse.com/music — 免版权音乐",
+                  ),
+                  style: const TextStyle(
+                    color: Colors.blueGrey,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              const Divider(),
+              SizedBox(height: r.dp(6)),
+              Row(
+                children: [
+                  Icon(
+                    Icons.image_rounded,
+                    size: r.icon(18),
+                    color: Colors.blue[300],
+                  ),
+                  SizedBox(width: r.dp(8)),
+                  const Expanded(
+                    child: Text(
+                      "Images by Canva",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: EdgeInsets.only(left: r.dp(26), top: r.dp(2)),
+                child: Text(
+                  tr(
+                    lang,
+                    "canva.com — Canva Content License Agreement",
+                    "canva.com — Perjanjian Lesen Kandungan Canva",
+                    "canva.com — Canva 内容许可协议",
+                  ),
+                  style: const TextStyle(
+                    color: Colors.blueGrey,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(tr(lang, "Close", "Tutup", "关闭")),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLanguageToggle(String currentLang, Responsive r) {
     final langs = [
-      {'code': 'en', 'label': 'EN',  'flag': '🇬🇧', 'color': Colors.blueAccent},
-      {'code': 'ms', 'label': 'BM',  'flag': '🇲🇾', 'color': Colors.orangeAccent},
-      {'code': 'zh', 'label': '中',  'flag': '🔤',  'color': Colors.redAccent},
+      {'code': 'en', 'label': 'EN', 'flag': '🇬🇧', 'color': Colors.blueAccent},
+      {
+        'code': 'ms',
+        'label': 'BM',
+        'flag': '🇲🇾',
+        'color': Colors.orangeAccent,
+      },
+      {'code': 'zh', 'label': '中', 'flag': '🇨🇳', 'color': Colors.redAccent},
     ];
     final titleMap = {'en': 'Language', 'ms': 'Bahasa', 'zh': '语言'};
 
@@ -328,7 +585,11 @@ class _MainDashboardState extends State<MainDashboard> {
       children: [
         Text(
           titleMap[currentLang] ?? 'Language',
-          style: TextStyle(fontSize: r.sp(9), fontWeight: FontWeight.bold, color: Colors.grey),
+          style: TextStyle(
+            fontSize: r.sp(9),
+            fontWeight: FontWeight.bold,
+            color: Colors.grey,
+          ),
         ),
         SizedBox(height: r.dp(4)),
         Container(
@@ -349,14 +610,21 @@ class _MainDashboardState extends State<MainDashboard> {
                   HapticFeedback.lightImpact();
                   unawaited(audioManager.playSfx('click.mp3'));
                   final prefs = await SharedPreferences.getInstance();
-                  await prefs.setString('kidspark_language', lang['code'] as String);
-                  KidSparkApp.languageNotifier.value = lang['code'] as String;
+                  final code = lang['code'] as String;
+                  await prefs.setString(PrefsKeys.language, code);
+                  KidSparkApp.languageNotifier.value = code;
+                  unawaited(audioManager.warmUpLanguage(code));
+                  if (!mounted) return;
+                  await audioManager.ensureLanguageOrPrompt(context, code);
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
                   width: double.infinity,
                   margin: EdgeInsets.symmetric(vertical: r.dp(1)),
-                  padding: EdgeInsets.symmetric(vertical: r.dp(4), horizontal: r.dp(4)),
+                  padding: EdgeInsets.symmetric(
+                    vertical: r.dp(4),
+                    horizontal: r.dp(4),
+                  ),
                   decoration: BoxDecoration(
                     color: isActive ? color : Colors.transparent,
                     borderRadius: BorderRadius.circular(r.dp(12)),
@@ -390,9 +658,15 @@ class _MainDashboardState extends State<MainDashboard> {
 
   Widget _buildContent(String lang, Map<String, String> t, Color accentColor) {
     if (_activeLevel != null) {
-      if (_selectedIndex == 0) return WordBuilderGame(level: _activeLevel!, onBack: _exitToMap);
-      if (_selectedIndex == 1) return EmotionalGame(level: _activeLevel!, onBack: _exitToMap);
-      if (_selectedIndex == 2) return PuzzleGame(level: _activeLevel!, onBack: _exitToMap);
+      if (_selectedIndex == 0) {
+        return WordBuilderGame(level: _activeLevel!, onBack: _exitToMap);
+      }
+      if (_selectedIndex == 1) {
+        return EmotionalGame(level: _activeLevel!, onBack: _exitToMap);
+      }
+      if (_selectedIndex == 2) {
+        return PuzzleGame(level: _activeLevel!, onBack: _exitToMap);
+      }
     }
 
     switch (_selectedIndex) {
@@ -432,8 +706,6 @@ class _MainDashboardState extends State<MainDashboard> {
             setState(() => _activeLevel = lv);
           },
         );
-      case 3:
-        return const SettingsScreen();
       default:
         return const SizedBox();
     }
@@ -472,21 +744,26 @@ class ImageLevelMap extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = Responsive(context);
     final double itemSpacing = r.dp(170);
-    final double amplitude   = r.dp(65);
-    final double nodeSize    = r.dp(90);
+    final double amplitude = r.dp(65);
+    final double nodeSize = r.dp(90);
 
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [themeColor.withOpacity(0.15), Colors.white],
+          colors: [themeColor.withValues(alpha: 0.15), Colors.white],
         ),
       ),
       child: Column(
         children: [
           Padding(
-            padding: EdgeInsets.only(top: r.dp(16), bottom: r.dp(4), left: r.dp(20), right: r.dp(20)),
+            padding: EdgeInsets.only(
+              top: r.dp(16),
+              bottom: r.dp(4),
+              left: r.dp(20),
+              right: r.dp(20),
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -495,20 +772,27 @@ class ImageLevelMap extends StatelessWidget {
                   style: TextStyle(
                     fontSize: r.sp(24),
                     fontWeight: FontWeight.w900,
-                    color: themeColor.withOpacity(0.85),
+                    color: themeColor.withValues(alpha: 0.85),
                   ),
                 ),
                 SizedBox(width: r.dp(16)),
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: r.dp(12), vertical: r.dp(6)),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: r.dp(12),
+                    vertical: r.dp(6),
+                  ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF3D3D3D),
+                    color: AppColors.chip,
                     borderRadius: BorderRadius.circular(r.dp(20)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.star_rounded, size: r.icon(18), color: Colors.amber),
+                      Icon(
+                        Icons.star_rounded,
+                        size: r.icon(18),
+                        color: Colors.amber,
+                      ),
                       SizedBox(width: r.dp(4)),
                       Text(
                         "$_totalStars / $_maxStars",
@@ -536,30 +820,43 @@ class ImageLevelMap extends StatelessWidget {
                     child: Stack(
                       children: [
                         Positioned.fill(
-                          child: CustomPaint(
-                            painter: SinePathPainter(
-                              totalLevels:   levelImages.length,
-                              itemSpacing:   itemSpacing,
-                              amplitude:     amplitude,
-                              centerY:       centerY,
-                              unlockedLevel: unlockedLevel,
-                              color:         themeColor,
-                              strokeWidth:   r.dp(8),
+                          child: RepaintBoundary(
+                            child: CustomPaint(
+                              painter: SinePathPainter(
+                                totalLevels: levelImages.length,
+                                itemSpacing: itemSpacing,
+                                amplitude: amplitude,
+                                centerY: centerY,
+                                unlockedLevel: unlockedLevel,
+                                color: themeColor,
+                                strokeWidth: r.dp(8),
+                              ),
                             ),
                           ),
                         ),
                         ...List.generate(levelImages.length, (index) {
-                          final level    = index + 1;
+                          final level = index + 1;
                           final isLocked = level > unlockedLevel;
-                          final x        = index * itemSpacing + r.dp(70);
-                          final y        = centerY + sin(index * 1.2) * amplitude - nodeSize * 0.72;
-                          final stars    = levelStars[level] ?? 0;
+                          final x = index * itemSpacing + r.dp(70);
+                          final y =
+                              centerY +
+                              sin(index * 1.2) * amplitude -
+                              nodeSize * 0.72;
+                          final stars = levelStars[level] ?? 0;
                           return Positioned(
                             left: x,
-                            top:  y,
+                            top: y,
                             child: GestureDetector(
-                              onTap: isLocked ? null : () => onLevelSelect(level),
-                              child: _buildNode(level, isLocked, levelImages[index], stars, r),
+                              onTap: isLocked
+                                  ? null
+                                  : () => onLevelSelect(level),
+                              child: _buildNode(
+                                level,
+                                isLocked,
+                                levelImages[index],
+                                stars,
+                                r,
+                              ),
                             ),
                           );
                         }),
@@ -575,7 +872,13 @@ class ImageLevelMap extends StatelessWidget {
     );
   }
 
-  Widget _buildNode(int level, bool locked, String imagePath, int stars, Responsive r) {
+  Widget _buildNode(
+    int level,
+    bool locked,
+    String imagePath,
+    int stars,
+    Responsive r,
+  ) {
     final double nodeSize = r.dp(90);
 
     return Column(
@@ -594,10 +897,10 @@ class ImageLevelMap extends StatelessWidget {
               BoxShadow(
                 color: locked
                     ? Colors.transparent
-                    : themeColor.withOpacity(0.25),
+                    : themeColor.withValues(alpha: 0.25),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
-              )
+              ),
             ],
           ),
           child: ClipOval(
@@ -607,27 +910,38 @@ class ImageLevelMap extends StatelessWidget {
                       Positioned.fill(
                         child: ColorFiltered(
                           colorFilter: const ColorFilter.mode(
-                              Colors.grey, BlendMode.saturation),
-                          child: Image.asset(imagePath,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  Container(color: Colors.grey[200])),
+                            Colors.grey,
+                            BlendMode.saturation,
+                          ),
+                          child: Image.asset(
+                            imagePath,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) =>
+                                Container(color: Colors.grey[200]),
+                          ),
                         ),
                       ),
-                      Container(color: Colors.black.withOpacity(0.35)),
+                      Container(color: Colors.black.withValues(alpha: 0.35)),
                       Center(
-                        child: Icon(Icons.lock_rounded,
-                            color: Colors.white, size: r.icon(30)),
+                        child: Icon(
+                          Icons.lock_rounded,
+                          color: Colors.white,
+                          size: r.icon(30),
+                        ),
                       ),
                     ],
                   )
                 : Image.asset(
                     imagePath,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        Container(color: Colors.grey[200],
-                            child: Icon(Icons.image,
-                                color: Colors.grey[400], size: r.icon(32))),
+                    errorBuilder: (_, _, _) => Container(
+                      color: Colors.grey[200],
+                      child: Icon(
+                        Icons.image,
+                        color: Colors.grey[400],
+                        size: r.icon(32),
+                      ),
+                    ),
                   ),
           ),
         ),
@@ -641,18 +955,22 @@ class ImageLevelMap extends StatelessWidget {
           child: Text(
             '$level',
             style: TextStyle(
-                color: Colors.white,
-                fontSize: r.sp(11),
-                fontWeight: FontWeight.bold),
+              color: Colors.white,
+              fontSize: r.sp(11),
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
         if (!locked)
           Padding(
             padding: EdgeInsets.only(top: r.dp(4)),
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: r.dp(6), vertical: r.dp(3)),
+              padding: EdgeInsets.symmetric(
+                horizontal: r.dp(6),
+                vertical: r.dp(3),
+              ),
               decoration: BoxDecoration(
-                color: const Color(0xFF3D3D3D),
+                color: AppColors.chip,
                 borderRadius: BorderRadius.circular(r.dp(10)),
               ),
               child: Row(
@@ -671,7 +989,6 @@ class ImageLevelMap extends StatelessWidget {
     );
   }
 }
-
 
 class SinePathPainter extends CustomPainter {
   final int totalLevels;
@@ -695,7 +1012,7 @@ class SinePathPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final dimPaint = Paint()
-      ..color = color.withOpacity(0.18)
+      ..color = color.withValues(alpha: 0.18)
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
@@ -714,11 +1031,22 @@ class SinePathPainter extends CustomPainter {
 
     final activePath = Path()..moveTo(startX, centerY);
     for (double i = 0; i < unlockedLevel - 1; i += 0.05) {
-      activePath.lineTo(i * itemSpacing + startX, centerY + sin(i * 1.2) * amplitude);
+      activePath.lineTo(
+        i * itemSpacing + startX,
+        centerY + sin(i * 1.2) * amplitude,
+      );
     }
     canvas.drawPath(activePath, activePaint);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant SinePathPainter oldDelegate) {
+    return oldDelegate.totalLevels != totalLevels ||
+        oldDelegate.itemSpacing != itemSpacing ||
+        oldDelegate.amplitude != amplitude ||
+        oldDelegate.centerY != centerY ||
+        oldDelegate.unlockedLevel != unlockedLevel ||
+        oldDelegate.color != color ||
+        oldDelegate.strokeWidth != strokeWidth;
+  }
 }
